@@ -16,8 +16,7 @@ router.post("/register", async (req, res) => {
     const admin = new Admin({ name, email, password });
     await admin.save();
 
-    const token = generateToken(admin);
-    res.status(201).json({ message: "Admin registered", token });
+    res.status(201).json({ message: "Admin registered" });
   } catch (err) {
     console.error("Admin register error:", err);
     res.status(500).json({ error: "Server error" });
@@ -44,30 +43,30 @@ router.post("/login", async (req, res) => {
 });
 
 // ============== Approve Doctor =================
-router.put("/approve/:doctorId", jwtAuthMiddleware, async (req, res) => {
-  try {
-    const doctor = await Doctor.findById(req.params.doctorId);
-    if (!doctor) return res.status(404).json({ error: "Doctor not found" });
+// router.put("/approve/:doctorId", jwtAuthMiddleware, async (req, res) => {
+//   try {
+//     const doctor = await Doctor.findById(req.params.doctorId);
+//     if (!doctor) return res.status(404).json({ error: "Doctor not found" });
 
-    doctor.isApproved = true;
-    await doctor.save();
+//     doctor.isApproved = true;
+//     await doctor.save();
 
-    res.status(200).json({ message: "Doctor approved successfully" });
-  } catch (err) {
-    console.error("Doctor approval error:", err);
-    res.status(500).json({ error: "Server error" });
-  }
-});
+//     res.status(200).json({ message: "Doctor approved successfully" });
+//   } catch (err) {
+//     console.error("Doctor approval error:", err);
+//     res.status(500).json({ error: "Server error" });
+//   }
+// });
 
-// ============== Get All Pending Doctors =================
-router.get("/pending-doctors", jwtAuthMiddleware, async (req, res) => {
-  try {
-    const pending = await Doctor.find({ isApproved: false }).select("-password");
-    res.status(200).json(pending);
-  } catch (err) {
-    console.error("Pending doctors fetch error:", err);
-    res.status(500).json({ error: "Server error" });
-  }
-});
+// // ============== Get All Pending Doctors =================
+// router.get("/pending-doctors", jwtAuthMiddleware, async (req, res) => {
+//   try {
+//     const pending = await Doctor.find({ isApproved: false }).select("-password");
+//     res.status(200).json(pending);
+//   } catch (err) {
+//     console.error("Pending doctors fetch error:", err);
+//     res.status(500).json({ error: "Server error" });
+//   }
+// });
 
 module.exports = router;

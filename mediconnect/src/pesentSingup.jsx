@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import axios from "axios";
+import Navbar from "./homeNavbar";
 
 const PatientSignup = () => {
   const [formData, setFormData] = useState({
@@ -38,6 +39,8 @@ const PatientSignup = () => {
   };
 
   return (
+    <>
+    <Navbar/>
     <div className="container mt-5" style={{ maxWidth: "600px" }}>
       <link
         href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
@@ -141,6 +144,7 @@ const PatientSignup = () => {
         </form>
       </div>
     </div>
+    </>
   );
 };
 

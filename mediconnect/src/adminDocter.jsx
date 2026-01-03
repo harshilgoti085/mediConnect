@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import axios from "axios";
+import Navbar from "./adminNavbar";
 
 function AdminDoctorPanel() {
   const [doctors, setDoctors] = useState([]);
@@ -58,6 +59,8 @@ function AdminDoctorPanel() {
   };
 
   return (
+    <>
+    <Navbar/>
     <div className="container mt-5">
       {/* Bootstrap CDN */}
       <link
@@ -138,6 +141,7 @@ function AdminDoctorPanel() {
         </div>
       )}
     </div>
+    </>
   );
 }
 

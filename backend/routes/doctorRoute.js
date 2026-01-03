@@ -1,158 +1,205 @@
-const express = require("express");
+/*const express = require("express");
 const router = express.Router();
 const Doctor = require("../schema/docterSchema");
 const bcrypt = require("bcryptjs");
 const { generateToken, jwtAuthMiddleware } = require("../jwt");
 
-// ================= Doctor Signup =================
+// ================= REGISTER =================
 router.post("/register", async (req, res) => {
   try {
-    const {
-      name,
-      email,
-      password,
-      specialization,
-      experience,
-      hospitalName,
-      contactNumber,
-      profileImage,
-    } = req.body;
+    const emailLower = req.body.email.toLowerCase().trim();
+    const existing = await Doctor.findOne({ email: emailLower });
 
-    const existing = await Doctor.findOne({ email });
     if (existing) {
       return res.status(400).json({ error: "Email already exists" });
     }
 
     const doctor = new Doctor({
-      name,
-      email,
-      password,
-      specialization,
-      experience,
-      hospitalName,
-      contactNumber,
-      profileImage,
-      isApproved: false, // 👈 default false
+      ...req.body,
+      email: emailLower,
+      role: "doctor" // Explicitly set role in DB
     });
 
     await doctor.save();
-
-    res.status(201).json({
-      message: "Registration successful. Awaiting admin approval.",
-      doctor: {
-        id: doctor._id,
-        name: doctor.name,
-        email: doctor.email,
-        specialization: doctor.specialization,
-        experience: doctor.experience,
-        hospitalName: doctor.hospitalName,
-        contactNumber: doctor.contactNumber,
-        isApproved: doctor.isApproved,
-      },
-    });
+    res.status(201).json({ message: "Registration successful." });
   } catch (err) {
-    console.error("Error during registration:", err);
+    console.error(err);
     res.status(500).json({ error: "Server error" });
   }
 });
 
-// ================= Doctor Login =================
+// ================= LOGIN =================
 router.post("/login", async (req, res) => {
   try {
     const { email, password } = req.body;
-    const doctor = await Doctor.findOne({ email });
+    const doctor = await Doctor.findOne({ email: email.toLowerCase().trim() });
 
     if (!doctor) return res.status(400).json({ error: "Invalid email or password" });
-
-    // Check approval status 👇
-    if (!doctor.isApproved) {
-      return res.status(403).json({ error: "Your account is pending admin approval." });
-    }
 
     const isMatch = await bcrypt.compare(password, doctor.password);
     if (!isMatch) return res.status(400).json({ error: "Invalid email or password" });
 
+    // IMPORTANT: Ensure your doctor object has the role "doctor" 
+    // so generateToken(doctor) creates a DOCTOR token.
     const token = generateToken(doctor);
 
-    res.status(200).json({
+    res.json({
       message: "Login successful",
       token,
       doctor: {
         id: doctor._id,
         name: doctor.name,
         email: doctor.email,
-        specialization: doctor.specialization,
-        experience: doctor.experience,
-        hospitalName: doctor.hospitalName,
-        contactNumber: doctor.contactNumber,
+        role: "doctor"
       },
     });
   } catch (err) {
-    console.error("Login error:", err);
+    console.error(err);
     res.status(500).json({ error: "Server error" });
   }
 });
+
+
+// ================= GET ALL DOCTORS =================
 router.get("/all", async (req, res) => {
   try {
-    const doctors = await Doctor.find().select("-password");
-    res.status(200).json(doctors);
+    const doctors = await Doctor.find({}, "-password");
+    res.json(doctors);
   } catch (err) {
-    console.error("Fetch doctors error:", err);
     res.status(500).json({ error: "Server error" });
   }
 });
 
-// ================= Get Single Doctor by ID =================
-router.get("/:id", async (req, res) => {
+
+
+// ================= GET LOGGED-IN DOCTOR PROFILE =================
+router.get("/profile", jwtAuthMiddleware, async (req, res) => {
   try {
-    const doctor = await Doctor.findById(req.params.id).select("-password");
-    if (!doctor) return res.status(404).json({ error: "Doctor not found" });
-    res.status(200).json(doctor);
+    // req.user.id comes from the decoded token in your jwtAuthMiddleware
+    const doctor = await Doctor.findById(req.user.id).select("-password");
+
+    if (!doctor) {
+      return res.status(404).json({ error: "Doctor not found" });
+    }
+
+    res.json(doctor);
   } catch (err) {
-    console.error("Fetch single doctor error:", err);
-    res.status(500).json({ error: "Server error" });
+    console.error("Profile Fetch Error:", err);
+    res.status(500).json({ error: "Server error fetching profile" });
   }
 });
 
-// ================= Delete Doctor =================
-router.delete("/:id", async (req, res) => {
+// ================= UPDATE DOCTOR PROFILE =================
+router.put("/update-profile", jwtAuthMiddleware, async (req, res) => {
   try {
-    const doctor = await Doctor.findByIdAndDelete(req.params.id);
-    if (!doctor) return res.status(404).json({ error: "Doctor not found" });
+    const updatedData = req.body;
+    
+    // Prevent password from being updated via this route for security
+    delete updatedData.password; 
 
-    res.status(200).json({ message: "Doctor deleted successfully" });
+    const doctor = await Doctor.findByIdAndUpdate(
+      req.user.id,
+      { $set: updatedData },
+      { new: true, runValidators: true }
+    ).select("-password");
+
+    res.json({ message: "Profile updated successfully", doctor });
   } catch (err) {
-    console.error("Delete doctor error:", err);
-    res.status(500).json({ error: "Server error" });
+    console.error("Update Error:", err);
+    res.status(500).json({ error: "Failed to update profile" });
   }
 });
 
-// ================= Approve Doctor =================
-router.put("/approve/:id", async (req, res) => {
-  try {
-    const doctor = await Doctor.findById(req.params.id);
-    if (!doctor) return res.status(404).json({ error: "Doctor not found" });
+// ... rest of your routes (me, all)
+module.exports = router;*/
+const express = require("express");
+const router = express.Router();
+const Doctor = require("../schema/docterSchema");
+const bcrypt = require("bcryptjs");
+const { generateToken, jwtAuthMiddleware } = require("../jwt");
 
-    doctor.isApproved = true;
+// ================= REGISTER =================
+router.post("/register", async (req, res) => {
+  try {
+    const emailLower = req.body.email.toLowerCase().trim();
+    const existing = await Doctor.findOne({ email: emailLower });
+    if (existing) return res.status(400).json({ error: "Email already exists" });
+
+    const doctor = new Doctor({
+      ...req.body,
+      email: emailLower,
+      role: "doctor"
+    });
+
     await doctor.save();
-
-    res.status(200).json({ message: "Doctor approved successfully" });
+    res.status(201).json({ message: "Registration successful." });
   } catch (err) {
-    console.error("Approval error:", err);
+    console.error(err);
     res.status(500).json({ error: "Server error" });
   }
 });
 
-// ================= Get Doctor Profile =================
-router.get("/me", jwtAuthMiddleware, async (req, res) => {
+// ================= LOGIN =================
+router.post("/login", async (req, res) => {
   try {
+    const { email, password } = req.body;
+    const doctor = await Doctor.findOne({ email: email.toLowerCase().trim() });
+    if (!doctor) return res.status(400).json({ error: "Invalid email or password" });
+
+    const isMatch = await bcrypt.compare(password, doctor.password);
+    if (!isMatch) return res.status(400).json({ error: "Invalid email or password" });
+
+    const token = generateToken(doctor);
+    res.json({
+      message: "Login successful",
+      token,
+      doctor: { id: doctor._id, name: doctor.name, role: "doctor" },
+    });
+  } catch (err) {
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// ================= GET PROFILE (CRITICAL FIX) =================
+// This is the route that was giving the 404 error
+router.get("/profile", jwtAuthMiddleware, async (req, res) => {
+  try {
+    // req.user.id is extracted from the JWT token by the middleware
     const doctor = await Doctor.findById(req.user.id).select("-password");
     if (!doctor) return res.status(404).json({ error: "Doctor not found" });
-    res.status(200).json(doctor);
+    res.json(doctor);
   } catch (err) {
-    console.error("Profile fetch error:", err);
+    console.error("Profile Fetch Error:", err);
+    res.status(500).json({ error: "Server error fetching profile" });
+  }
+});
+
+// ================= UPDATE PROFILE =================
+router.put("/update-profile", jwtAuthMiddleware, async (req, res) => {
+  try {
+    const updatedData = req.body;
+    delete updatedData.password; 
+    const doctor = await Doctor.findByIdAndUpdate(
+      req.user.id,
+      { $set: updatedData },
+      { new: true, runValidators: true }
+    ).select("-password");
+    res.json({ message: "Profile updated successfully", doctor });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to update profile" });
+  }
+});
+
+
+// ================= GET ALL DOCTORS =================
+router.get("/all", async (req, res) => {
+  try {
+    const doctors = await Doctor.find({}, "-password");
+    res.json(doctors);
+  } catch (err) {
     res.status(500).json({ error: "Server error" });
   }
 });
 
 module.exports = router;
+

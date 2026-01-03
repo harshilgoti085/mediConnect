@@ -11,7 +11,14 @@ const patientSchema = new mongoose.Schema({
   address: { type: String },
   medicalHistory: { type: [String], default: [] },
   profileImage: { type: String },
+
   role: { type: String, default: "patient" },
+
+  appointments: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Appointment"
+  }]
+
 }, { timestamps: true });
 
 patientSchema.pre("save", async function (next) {

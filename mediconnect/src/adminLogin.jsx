@@ -1,7 +1,11 @@
 import React, { useState } from "react";
 import axios from "axios";
+import { useNavigate } from "react-router-dom";
+import Navbar from "./homeNavbar";
 
 const AdminLogin = () => {
+  const navigate = useNavigate();
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -13,79 +17,110 @@ const AdminLogin = () => {
     setLoading(true);
 
     try {
-      const response = await axios.post("http://localhost:5000/Admin/login", {
-        email,
-        password,
-      });
+      const res = await axios.post(
+        "http://localhost:5000/admin/login",
+        { email, password },
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+        }
+      );
 
-      // Save token in localStorage
-      localStorage.setItem("adminToken", response.data.token);
+      // Save token
+      localStorage.setItem("adminToken", res.data.token);
 
-      alert("Login successful!");
-      setEmail("");
-      setPassword("");
-      // Optionally redirect to admin dashboard here
+      // Redirect after login
+      navigate("/admin-doctor");
     } catch (err) {
-      console.error(err);
-      setError(err.response?.data?.error || "Login failed");
+      if (err.response && err.response.data.error) {
+        setError(err.response.data.error);
+      } else {
+        setError("Login failed. Try again.");
+      }
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="container mt-5">
-      <div className="row justify-content-center">
-        <div className="col-md-5">
-          <div className="card shadow p-4">
-            <h2 className="text-center mb-4">Admin Login</h2>
+    <>
+    <Navbar/>
+    <div style={styles.container}>
+      <form onSubmit={handleSubmit} style={styles.card}>
+        <h2 style={styles.title}>Admin Login</h2>
 
-            {error && <div className="alert alert-danger">{error}</div>}
+        {error && <p style={styles.error}>{error}</p>}
 
-            <form onSubmit={handleSubmit}>
-              <div className="mb-3">
-                <label htmlFor="email" className="form-label">
-                  Email
-                </label>
-                <input
-                  type="email"
-                  className="form-control"
-                  id="email"
-                  placeholder="Enter your email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                />
-              </div>
+        <input
+          type="email"
+          placeholder="Admin Email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          required
+          style={styles.input}
+        />
 
-              <div className="mb-3">
-                <label htmlFor="password" className="form-label">
-                  Password
-                </label>
-                <input
-                  type="password"
-                  className="form-control"
-                  id="password"
-                  placeholder="Enter your password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                />
-              </div>
+        <input
+          type="password"
+          placeholder="Password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          required
+          style={styles.input}
+        />
 
-              <button
-                type="submit"
-                className="btn btn-primary w-100"
-                disabled={loading}
-              >
-                {loading ? "Logging in..." : "Login"}
-              </button>
-            </form>
-          </div>
-        </div>
-      </div>
+        <button type="submit" style={styles.button} disabled={loading}>
+          {loading ? "Logging in..." : "Login"}
+        </button>
+      </form>
     </div>
+    </>
   );
+};
+
+const styles = {
+  container: {
+    height: "100vh",
+    display: "flex",
+    justifyContent: "center",
+    alignItems: "center",
+    background: "#fff"
+  },
+  card: {
+    width: "350px",
+    padding: "30px",
+    background: "#fff",
+    borderRadius: "10px",
+    boxShadow: "0 15px 30px rgba(0,0,0,0.2)",
+    display: "flex",
+    flexDirection: "column",
+  },
+  title: {
+    textAlign: "center",
+    marginBottom: "20px",
+  },
+  input: {
+    marginBottom: "15px",
+    padding: "12px",
+    fontSize: "16px",
+    borderRadius: "6px",
+    border: "1px solid #ccc",
+  },
+  button: {
+    padding: "12px",
+    fontSize: "16px",
+    background: "#284be3ff",
+    color: "#fff",
+    border: "none",
+    borderRadius: "6px",
+    cursor: "pointer",
+  },
+  error: {
+    color: "red",
+    marginBottom: "10px",
+    textAlign: "center",
+  },
 };
 
 export default AdminLogin;
