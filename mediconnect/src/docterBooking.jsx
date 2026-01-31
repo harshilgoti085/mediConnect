@@ -24,51 +24,84 @@ const DoctorBooking = () => {
       });
   }, []);
 
+  // ✅ BOOKING VALIDATION
+  const validateBooking = () => {
+    const { date, timeSlot, reason } = bookingData;
+
+    if (!date || !timeSlot || !reason) {
+      return "Please select date, time slot, and provide a reason.";
+    }
+
+    if (reason.trim().length < 5) {
+      return "Reason must be at least 5 characters long.";
+    }
+
+    const selectedDate = new Date(date);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    if (selectedDate < today) {
+      return "You cannot book an appointment for a past date.";
+    }
+
+    const now = new Date();
+    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+
+    if (selectedDate.getTime() === today.getTime()) {
+      const slotStart = timeSlot.split(" - ")[0];
+      const [time, modifier] = slotStart.split(" ");
+      let [hours, minutes] = time.split(":").map(Number);
+
+      if (modifier === "PM" && hours !== 12) hours += 12;
+      if (modifier === "AM" && hours === 12) hours = 0;
+
+      const slotMinutes = hours * 60 + minutes;
+
+      if (slotMinutes <= currentMinutes) {
+        return "You cannot book a past time slot for today.";
+      }
+    }
+
+    return null;
+  };
+
   const handleBooking = async () => {
     const token = localStorage.getItem("token");
-    if (!token) { alert("Please login first!"); return; }
-    
-    // Validation: Ensure all fields are filled
-    if (!bookingData.date || !bookingData.timeSlot || !bookingData.reason) {
-      alert("Please select date, time slot, and provide a reason for the visit.");
+    if (!token) { 
+      alert("Please login first!"); 
+      return; 
+    }
+
+    const error = validateBooking();
+    if (error) {
+      alert(error);
       return;
     }
 
     try {
-      await axios.post("http://localhost:5000/appointment/request", 
+      await axios.post(
+        "http://localhost:5000/appointment/request",
         { doctorId: selectedDoctor._id, ...bookingData },
         { headers: { Authorization: `Bearer ${token}` } }
       );
       alert("✅ Appointment request sent successfully!");
       setShowModal(false);
-      // Reset form
       setBookingData({ date: "", timeSlot: "", reason: "" });
-    } catch (err) { 
-      alert(err.response?.data?.error || "Booking failed"); 
+    } catch (err) {
+      alert(err.response?.data?.error || "Booking failed");
     }
   };
 
   const styles = {
-    navContainer: {
-      position: "fixed",
-      top: 0,
-      left: 0,
-      right: 0,
-      zIndex: 1000 
-    },
-    pageWrapper: { 
-      display: "flex", 
-      minHeight: "100vh", 
-      backgroundColor: "#f4f7f6",
-      paddingTop: "70px" 
-    },
+    navContainer: { position: "fixed", top: 0, left: 0, right: 0, zIndex: 1000 },
+    pageWrapper: { display: "flex", minHeight: "100vh", backgroundColor: "#f4f7f6", paddingTop: "70px" },
     leftSide: {
       width: "30%",
       height: "calc(100vh - 70px)",
       position: "fixed",
       left: 0,
       top: "70px",
-      backgroundImage: "url('https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?auto=format&fit=crop&q=80&w=1000')", 
+      backgroundImage: "url('https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?auto=format&fit=crop&q=80&w=1000')",
       backgroundSize: "cover",
       backgroundPosition: "center",
       zIndex: 10
@@ -83,18 +116,14 @@ const DoctorBooking = () => {
       padding: "40px",
       color: "white"
     },
-    rightSide: {
-      width: "70%",
-      marginLeft: "30%", 
-      padding: "40px 60px"
-    },
-    profileSidebar: { 
-      position: "fixed", 
-      top: 0, 
-      right: 0, 
-      width: "400px", 
-      height: "100vh", 
-      zIndex: 2000, 
+    rightSide: { width: "70%", marginLeft: "30%", padding: "40px 60px" },
+    profileSidebar: {
+      position: "fixed",
+      top: 0,
+      right: 0,
+      width: "400px",
+      height: "100vh",
+      zIndex: 2000,
       backgroundColor: "white",
       boxShadow: "-5px 0 15px rgba(0,0,0,0.1)",
       padding: "30px",
@@ -112,13 +141,9 @@ const DoctorBooking = () => {
 
   return (
     <>
-      <div style={styles.navContainer}>
-        <Navbar />
-      </div>
+      <div style={styles.navContainer}><Navbar /></div>
 
       <div style={styles.pageWrapper}>
-        
-        {/* LEFT SIDE IMAGE */}
         <div style={styles.leftSide} className="d-none d-lg-block">
           <div style={styles.overlay}>
             <span className="badge bg-primary px-3 py-2 align-self-start mb-3 fw-bold rounded-pill">HEALTH INSIGHT</span>
@@ -127,7 +152,6 @@ const DoctorBooking = () => {
           </div>
         </div>
 
-        {/* RIGHT SIDE DOCTOR LIST */}
         <div style={styles.rightSide}>
           <h3 className="fw-bold text-dark mb-4">Available Doctors</h3>
 
@@ -136,20 +160,14 @@ const DoctorBooking = () => {
               <div key={doc._id} className="card border-0 shadow-sm rounded-4 overflow-hidden">
                 <div className="row g-0 align-items-center">
                   <div className="col-md-3">
-                    <img 
-                      src={doc.profileImage || DEFAULT_DOC_IMG} 
-                      onError={(e) => { e.target.src = DEFAULT_DOC_IMG; }}
-                      alt={doc.name} 
-                      className="w-100" 
-                      style={{ objectFit: "cover", height: "180px" }} 
-                    />
+                    <img src={doc.profileImage || DEFAULT_DOC_IMG} onError={(e) => { e.target.src = DEFAULT_DOC_IMG; }} alt={doc.name} className="w-100" style={{ objectFit: "cover", height: "180px" }} />
                   </div>
                   <div className="col-md-9 p-3">
                     <div className="d-flex justify-content-between">
                       <div>
                         <h5 className="fw-bold mb-0">Dr. {doc.name}</h5>
                         <p className="text-primary fw-bold mb-1 small">{doc.specialization}</p>
-                        <small className="text-muted"><i className="bi bi-hospital me-1"></i>{doc.hospitalName}</small>
+                        <small className="text-muted">{doc.hospitalName}</small>
                       </div>
                       <div className="text-end">
                         <small className="fw-bold text-muted">FEE</small>
@@ -167,79 +185,38 @@ const DoctorBooking = () => {
           </div>
         </div>
 
-        {/* PROFILE SIDEBAR */}
-        {showProfile && selectedDoctor && (
-          <div style={styles.profileSidebar} className="animate-slide">
-            <div className="d-flex justify-content-between align-items-center mb-4">
-                <h4 className="fw-bold m-0">Profile Details</h4>
-                <button className="btn-close" onClick={() => setShowProfile(false)}></button>
-            </div>
-            <img 
-              src={selectedDoctor.profileImage || DEFAULT_DOC_IMG} 
-              onError={(e) => { e.target.src = DEFAULT_DOC_IMG; }}
-              className="w-100 rounded-4 shadow mb-4" 
-              style={{height: "220px", objectFit: "cover"}} 
-              alt="doctor"
-            />
-            <h2 className="fw-bold mb-1">Dr. {selectedDoctor.name}</h2>
-            <p className="text-primary fw-bold mb-4">{selectedDoctor.specialization}</p>
-            <div className="bg-light p-3 rounded-4 mb-3 small">
-              <p className="mb-2"><strong>Hospital:</strong> {selectedDoctor.hospitalName}</p>
-              <p className="mb-2"><strong>Experience:</strong> {selectedDoctor.experience} Years</p>
-              <p className="mb-0"><strong>Email:</strong> {selectedDoctor.email || "info@mediconnect.com"}</p>
-            </div>
-            <button className="btn btn-primary w-100 py-3 rounded-pill fw-bold shadow mt-auto" onClick={() => { setShowProfile(false); setShowModal(true); }}>
-                PROCEED TO BOOKING
-            </button>
-          </div>
-        )}
-
-        {/* BOOKING MODAL */}
         {showModal && (
           <div className="modal d-block" style={{ background: "rgba(0,0,0,0.6)", zIndex: 3000 }}>
-            <div className="modal-dialog modal-dialog-centered" style={{maxWidth: "400px"}}>
+            <div className="modal-dialog modal-dialog-centered" style={{ maxWidth: "400px" }}>
               <div className="modal-content border-0 rounded-4 p-4 shadow-lg">
                 <h5 className="fw-bold mb-4 text-center">Set Appointment</h5>
-                
-                {/* Date Selection */}
+
                 <div className="mb-3">
                   <label className="form-label small fw-bold text-muted">Select Date</label>
-                  <input type="date" className="form-control rounded-pill" onChange={e => setBookingData({...bookingData, date: e.target.value})} />
+                  <input
+                    type="date"
+                    className="form-control rounded-pill"
+                    min={new Date().toISOString().split("T")[0]}
+                    onChange={e => setBookingData({ ...bookingData, date: e.target.value })}
+                  />
                 </div>
 
-                {/* Time Slot Selection */}
                 <div className="mb-3">
                   <label className="form-label small fw-bold text-muted">Available Time Slots</label>
-                  <select className="form-select rounded-pill" onChange={e => setBookingData({...bookingData, timeSlot: e.target.value})}>
+                  <select className="form-select rounded-pill" onChange={e => setBookingData({ ...bookingData, timeSlot: e.target.value })}>
                     <option value="">Choose Time Slot</option>
-                    <optgroup label="Morning (9 AM - 12 PM)">
-                      <option value="09:00 AM - 09:30 AM">09:00 AM - 09:30 AM</option>
-                      <option value="09:30 AM - 10:00 AM">09:30 AM - 10:00 AM</option>
-                      <option value="10:00 AM - 10:30 AM">10:00 AM - 10:30 AM</option>
-                      <option value="10:30 AM - 11:00 AM">10:30 AM - 11:00 AM</option>
-                      <option value="11:00 AM - 11:30 AM">11:00 AM - 11:30 AM</option>
-                      <option value="11:30 AM - 12:00 PM">11:30 AM - 12:00 PM</option>
-                    </optgroup>
-                    <optgroup label="Afternoon (4 PM - 7 PM)">
-                      <option value="04:00 PM - 04:30 PM">04:00 PM - 04:30 PM</option>
-                      <option value="04:30 PM - 05:00 PM">04:30 PM - 05:00 PM</option>
-                      <option value="05:00 PM - 05:30 PM">05:00 PM - 05:30 PM</option>
-                      <option value="05:30 PM - 06:00 PM">05:30 PM - 06:00 PM</option>
-                      <option value="06:00 PM - 06:30 PM">06:00 PM - 06:30 PM</option>
-                      <option value="06:30 PM - 07:00 PM">06:30 PM - 07:00 PM</option>
-                    </optgroup>
+                    <option>09:00 AM - 09:30 AM</option>
+                    <option>10:00 AM - 10:30 AM</option>
+                    <option>11:00 AM - 11:30 AM</option>
+                    <option>04:00 PM - 04:30 PM</option>
+                    <option>05:00 PM - 05:30 PM</option>
+                    <option>06:00 PM - 06:30 PM</option>
                   </select>
                 </div>
 
-                {/* ADDED: Reason for Booking Field */}
                 <div className="mb-4">
                   <label className="form-label small fw-bold text-muted">Reason for Appointment</label>
-                  <textarea 
-                    className="form-control rounded-4" 
-                    rows="2" 
-                    placeholder="e.g. Regular checkup, Fever, etc."
-                    onChange={e => setBookingData({...bookingData, reason: e.target.value})}
-                  ></textarea>
+                  <textarea className="form-control rounded-4" rows="2" onChange={e => setBookingData({ ...bookingData, reason: e.target.value })}></textarea>
                 </div>
 
                 <div className="d-flex gap-2">
@@ -251,10 +228,7 @@ const DoctorBooking = () => {
           </div>
         )}
 
-        <style>{`
-          .animate-slide { animation: slideIn 0.3s forwards; }
-          @keyframes slideIn { from { transform: translateX(100%); } to { transform: translateX(0); } }
-        `}</style>
+        <style>{`.animate-slide { animation: slideIn 0.3s forwards; } @keyframes slideIn { from { transform: translateX(100%); } to { transform: translateX(0); } }`}</style>
       </div>
     </>
   );

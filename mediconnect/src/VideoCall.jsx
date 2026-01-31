@@ -9,189 +9,217 @@ const VideoCall = () => {
   const navigate = useNavigate();
   const roomId = searchParams.get("room");
 
-  const localVideoRef = useRef();
-  const remoteVideoRef = useRef();
-  const peerRef = useRef(null);
+  const localVideoRef = useRef(null);
+  const remoteVideoRef = useRef(null);
+  const pcRef = useRef(null);
   const streamRef = useRef(null);
-  
-  // Refs to track signaling state and prevent collisions
+
   const makingOffer = useRef(false);
+  const polite = useRef(false);
   const ignoreOffer = useRef(false);
 
   const [callStatus, setCallStatus] = useState("Connecting...");
-  const [micActive, setMicActive] = useState(true);
-  const [videoActive, setVideoActive] = useState(true);
   const [seconds, setSeconds] = useState(0);
+  const [isMuted, setIsMuted] = useState(false);
+  const [isVideoOff, setIsVideoOff] = useState(false);
 
   useEffect(() => {
     if (!roomId) return;
 
-    const initCall = async () => {
+    const start = async () => {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
         streamRef.current = stream;
-        if (localVideoRef.current) localVideoRef.current.srcObject = stream;
+        localVideoRef.current.srcObject = stream;
 
-        peerRef.current = new RTCPeerConnection({
+        const pc = new RTCPeerConnection({
           iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
         });
 
-        // Add tracks to the connection
-        stream.getTracks().forEach((track) => peerRef.current.addTrack(track, stream));
+        pcRef.current = pc;
 
-        peerRef.current.ontrack = (event) => {
-          if (remoteVideoRef.current) {
-            remoteVideoRef.current.srcObject = event.streams[0];
-            setCallStatus("Connected");
-          }
+        stream.getTracks().forEach(track => pc.addTrack(track, stream));
+
+        pc.ontrack = e => {
+          remoteVideoRef.current.srcObject = e.streams[0];
+          setCallStatus("Connected");
         };
 
-        peerRef.current.onicecandidate = (event) => {
-          if (event.candidate) {
-            socket.emit("ice-candidate", { roomId, candidate: event.candidate });
+        pc.onicecandidate = e => {
+          if (e.candidate) socket.emit("ice-candidate", { roomId, candidate: e.candidate });
+        };
+
+        // 🔥 PERFECT NEGOTIATION — OFFER CREATION
+        pc.onnegotiationneeded = async () => {
+          try {
+            if (makingOffer.current) return;
+            makingOffer.current = true;
+
+            await pc.setLocalDescription(await pc.createOffer());
+            socket.emit("offer", { roomId, offer: pc.localDescription });
+
+          } catch (err) {
+            console.error("Negotiation error:", err);
+          } finally {
+            makingOffer.current = false;
           }
         };
 
         socket.emit("join-room", roomId);
 
-        /* =====================================================
-           ROBUST SIGNALING LOGIC (Perfect Negotiation)
-        ===================================================== */
-
-        socket.on("user-joined", async () => {
-          try {
-            makingOffer.current = true;
-            const offer = await peerRef.current.createOffer();
-            // Check if state changed before setting local description
-            if (peerRef.current.signalingState !== "stable") return;
-            
-            await peerRef.current.setLocalDescription(offer);
-            socket.emit("offer", { roomId, offer: peerRef.current.localDescription });
-          } catch (err) {
-            console.error("Offer Error:", err);
-          } finally {
-            makingOffer.current = false;
-          }
+        socket.on("user-joined", () => {
+          polite.current = true;
         });
 
-        socket.on("offer", async (offer) => {
+        // 🔥 PERFECT NEGOTIATION — HANDLE OFFER
+        socket.on("offer", async offer => {
+          const pc = pcRef.current;
+          if (!pc) return;
+
           try {
-            // Check if offer is valid
-            if (!offer) return;
+            const offerCollision =
+              makingOffer.current || pc.signalingState !== "stable";
 
-            const readyForOffer = !makingOffer.current && 
-                                (peerRef.current.signalingState === "stable" || ignoreOffer.current);
-
-            if (!readyForOffer) {
-              ignoreOffer.current = true;
+            ignoreOffer.current = !polite.current && offerCollision;
+            if (ignoreOffer.current) {
+              console.log("🚫 Ignoring offer collision");
               return;
             }
 
-            ignoreOffer.current = false;
-            await peerRef.current.setRemoteDescription(new RTCSessionDescription(offer));
-            const answer = await peerRef.current.createAnswer();
-            await peerRef.current.setLocalDescription(answer);
-            socket.emit("answer", { roomId, answer: peerRef.current.localDescription });
+            if (offerCollision) {
+              console.log("↩ Rolling back local description");
+              await pc.setLocalDescription({ type: "rollback" });
+            }
+
+            await pc.setRemoteDescription(new RTCSessionDescription(offer));
+
+            if (pc.signalingState === "have-remote-offer") {
+              const answer = await pc.createAnswer();
+              await pc.setLocalDescription(answer);
+              socket.emit("answer", { roomId, answer: pc.localDescription });
+            }
           } catch (err) {
-            console.error("Offer Handling Error:", err);
+            console.error("Error handling offer:", err);
           }
         });
 
-        socket.on("answer", async (answer) => {
+        // 🔥 HANDLE ANSWER SAFELY
+        socket.on("answer", async answer => {
+          const pc = pcRef.current;
           try {
-            // Ensure answer exists and state is correct
-            if (answer && peerRef.current.signalingState === "have-local-offer") {
-              await peerRef.current.setRemoteDescription(new RTCSessionDescription(answer));
+            if (pc.signalingState === "have-local-offer") {
+              await pc.setRemoteDescription(new RTCSessionDescription(answer));
+            } else {
+              console.warn("⚠️ Ignored answer in state:", pc.signalingState);
             }
           } catch (err) {
-            console.error("Answer Handling Error:", err);
+            console.error("Error setting remote answer:", err);
           }
         });
 
-        socket.on("ice-candidate", async (candidate) => {
+        socket.on("ice-candidate", async candidate => {
           try {
-            if (candidate && peerRef.current.remoteDescription) {
-              await peerRef.current.addIceCandidate(new RTCIceCandidate(candidate));
+            if (pcRef.current.remoteDescription) {
+              await pcRef.current.addIceCandidate(new RTCIceCandidate(candidate));
             }
           } catch (err) {
-            // Ignore candidates that arrive before remote description
+            console.error("ICE candidate error", err);
           }
         });
 
       } catch (err) {
-        setCallStatus("Camera Access Denied");
+        console.error("Media error:", err);
+        setCallStatus("Camera/Mic Blocked");
       }
     };
 
-    initCall();
+    start();
 
     return () => {
       socket.off("user-joined");
       socket.off("offer");
       socket.off("answer");
       socket.off("ice-candidate");
+      if (pcRef.current) pcRef.current.close();
       if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop());
-      if (peerRef.current) peerRef.current.close();
     };
   }, [roomId]);
 
-  // Timer Logic
   useEffect(() => {
-    let interval = null;
+    let interval;
     if (callStatus === "Connected") {
-      interval = setInterval(() => setSeconds((s) => s + 1), 1000);
+      interval = setInterval(() => setSeconds(s => s + 1), 1000);
     }
     return () => clearInterval(interval);
   }, [callStatus]);
 
-  const toggleMic = () => {
-    if (streamRef.current) {
-      const track = streamRef.current.getAudioTracks()[0];
-      track.enabled = !track.enabled;
-      setMicActive(track.enabled);
+  const toggleMute = () => {
+    const audioTrack = streamRef.current?.getAudioTracks()[0];
+    if (audioTrack) {
+      audioTrack.enabled = !audioTrack.enabled;
+      setIsMuted(!audioTrack.enabled);
     }
   };
 
   const toggleVideo = () => {
-    if (streamRef.current) {
-      const track = streamRef.current.getVideoTracks()[0];
-      track.enabled = !track.enabled;
-      setVideoActive(track.enabled);
+    const videoTrack = streamRef.current?.getVideoTracks()[0];
+    if (videoTrack) {
+      videoTrack.enabled = !videoTrack.enabled;
+      setIsVideoOff(!videoTrack.enabled);
     }
   };
 
   return (
-    <div style={{ height: "100vh", background: "#0f0f0f", color: "white", position: "relative", overflow: "hidden" }}>
-      {/* UI Elements (Identical to your previous professional UI) */}
-      <div style={{ position: "absolute", top: 20, width: "100%", padding: "0 20px", display: "flex", justifyContent: "space-between", zIndex: 10 }}>
-        <div style={{ background: "rgba(0,0,0,0.5)", padding: "10px 20px", borderRadius: "30px" }}>
-          {callStatus} | Room: {roomId}
-        </div>
-        <div style={{ background: "rgba(0,0,0,0.5)", padding: "10px 20px", borderRadius: "30px", fontWeight: "bold" }}>
-          {Math.floor(seconds / 60)}:{(seconds % 60).toString().padStart(2, '0')}
+    <div style={styles.page}>
+      <video ref={remoteVideoRef} autoPlay playsInline style={styles.remoteVideo} />
+
+      <div style={styles.header}>
+        <div style={styles.statusBadge}>
+          <div style={{
+            ...styles.pulse,
+            backgroundColor: callStatus === "Connected" ? "#4ade80" : "#facc15"
+          }} />
+          {callStatus} | {Math.floor(seconds / 60)}:{(seconds % 60).toString().padStart(2, "0")}
         </div>
       </div>
 
-      <div style={{ height: "100%", background: "#000", display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <video ref={remoteVideoRef} autoPlay playsInline style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-        
-        <div style={{ position: "absolute", top: 80, right: 30, width: "240px", height: "150px", borderRadius: "15px", overflow: "hidden", border: "2px solid #444", background: "#222" }}>
-          <video ref={localVideoRef} autoPlay muted playsInline style={{ width: "100%", height: "100%", objectFit: "cover", transform: "scaleX(-1)", display: videoActive ? 'block' : 'none' }} />
-          {!videoActive && <div style={{ height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}><i className="bi bi-camera-video-off fs-1"></i></div>}
-        </div>
+      <div style={styles.localContainer}>
+        <video ref={localVideoRef} autoPlay muted playsInline style={{ ...styles.localVideo, opacity: isVideoOff ? 0 : 1 }} />
+        {isVideoOff && <div style={styles.videoOffOverlay}>🚫</div>}
       </div>
 
-      <div style={{ position: "absolute", bottom: 40, left: "50%", transform: "translateX(-50%)", display: "flex", gap: "20px", background: "#1a1a1a", padding: "15px 40px", borderRadius: "50px" }}>
-        <button onClick={toggleMic} style={{ background: micActive ? "#444" : "#d32f2f", color: "white", border: "none", width: "50px", height: "50px", borderRadius: "50%", cursor: "pointer" }}>
-          <i className={`bi bi-mic${micActive ? "-fill" : "-mute-fill"}`}></i>
-        </button>
-        <button onClick={toggleVideo} style={{ background: videoActive ? "#444" : "#d32f2f", color: "white", border: "none", width: "50px", height: "50px", borderRadius: "50%", cursor: "pointer" }}>
-          <i className={`bi bi-camera-video${videoActive ? "-fill" : "-off-fill"}`}></i>
-        </button>
-        <button onClick={() => navigate(-1)} style={{ background: "#d32f2f", color: "white", border: "none", padding: "0 30px", borderRadius: "25px", fontWeight: "bold", cursor: "pointer" }}>END SESSION</button>
+      <div style={styles.footer}>
+        <div style={styles.controlsBg}>
+          <button onClick={toggleMute} style={{ ...styles.iconBtn, color: isMuted ? "#ff4d4d" : "white" }}>
+            {isMuted ? "🔇" : "🎙️"}
+          </button>
+
+          <button onClick={() => navigate(-1)} style={styles.endCallBtn}>
+            Hang Up
+          </button>
+
+          <button onClick={toggleVideo} style={{ ...styles.iconBtn, color: isVideoOff ? "#ff4d4d" : "white" }}>
+            {isVideoOff ? "🙈" : "📹"}
+          </button>
+        </div>
       </div>
     </div>
   );
+};
+
+const styles = {
+  page: { height: "100vh", width: "100vw", backgroundColor: "#0a0a0a", position: "relative", overflow: "hidden" },
+  remoteVideo: { position: "absolute", width: "100%", height: "100%", objectFit: "cover" },
+  header: { position: "relative", zIndex: 10, padding: "20px" },
+  statusBadge: { backgroundColor: "rgba(0,0,0,0.5)", color: "white", padding: "8px 16px", borderRadius: "20px", display: "flex", gap: "10px" },
+  pulse: { width: "8px", height: "8px", borderRadius: "50%" },
+  localContainer: { position: "absolute", top: "20px", right: "20px", width: "240px", height: "150px", borderRadius: "12px", overflow: "hidden" },
+  localVideo: { width: "100%", height: "100%", objectFit: "cover", transform: "scaleX(-1)" },
+  videoOffOverlay: { position: "absolute", width: "100%", height: "100%", display: "flex", justifyContent: "center", alignItems: "center", background: "#1a1a1a" },
+  footer: { position: "absolute", bottom: "30px", width: "100%", display: "flex", justifyContent: "center" },
+  controlsBg: { backgroundColor: "rgba(255,255,255,0.1)", padding: "12px 24px", borderRadius: "40px", display: "flex", gap: "25px" },
+  iconBtn: { background: "none", border: "none", fontSize: "22px", cursor: "pointer" },
+  endCallBtn: { backgroundColor: "#ff4d4d", color: "white", border: "none", padding: "10px 24px", borderRadius: "25px", cursor: "pointer" }
 };
 
 export default VideoCall;

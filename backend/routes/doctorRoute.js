@@ -174,6 +174,39 @@ router.get("/profile", jwtAuthMiddleware, async (req, res) => {
   }
 });
 
+
+
+
+
+
+
+
+// ============== Delete Doctor (Anyone Authenticated) =================
+router.delete("/delete-doctor/:doctorId", jwtAuthMiddleware, async (req, res) => {
+  try {
+    const doctorId = req.params.doctorId;
+
+    const doctor = await Doctor.findById(doctorId);
+    if (!doctor) {
+      return res.status(404).json({ error: "Doctor not found" });
+    }
+
+    await Doctor.findByIdAndDelete(doctorId);
+
+    res.status(200).json({ message: "Doctor deleted successfully" });
+  } catch (err) {
+    console.error("Delete doctor error:", err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+
+
+
+
+
+
+
 // ================= UPDATE PROFILE =================
 router.put("/update-profile", jwtAuthMiddleware, async (req, res) => {
   try {

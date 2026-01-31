@@ -239,6 +239,48 @@ router.post("/request", jwtAuthMiddleware, async (req, res) => {
   }
 });
 
+
+
+
+
+// Route to mark an appointment as "done"
+// ✅ Add jwtAuthMiddleware here to match your frontend request
+router.put("/mark-done/:id", jwtAuthMiddleware, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const updatedAppointment = await Appointment.findByIdAndUpdate(
+      id,
+      { status: "done" },
+      { new: true }
+    );
+
+    if (!updatedAppointment) {
+      return res.status(404).json({ message: "Appointment not found" });
+    }
+
+    res.status(200).json({ 
+      message: "Appointment marked as done successfully", 
+      data: updatedAppointment 
+    });
+  } catch (error) {
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+});
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 /* =====================================================
    2️⃣ DOCTOR → VIEW MY APPOINTMENTS (TOKEN BASED)
 ===================================================== */
@@ -443,6 +485,14 @@ router.get("/my-appointments-patient", jwtAuthMiddleware, async (req, res) => {
      res.status(500).json({ error: error.message });
    }
  });
+
+
+
+
+
+
+
+
 
 
 
